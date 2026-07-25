@@ -6,8 +6,8 @@ Deterministic placeholder for SAM segmentation: labels each RGB-D frame with a f
 
 | Topic | Type | Direction |
 | --- | --- | --- |
-| `/rgbd_frame` | `meridian_msgs/RGBDFrame` | subscribe |
-| `/segment_image` | `meridian_msgs/SegmentImage` | publish |
+| `/camera/rgb` | `sensor_msgs/Image` (rgb8) | subscribe |
+| `/segment_image` | `sensor_msgs/Image` (mono8) | publish |
 
 ## Parameters
 

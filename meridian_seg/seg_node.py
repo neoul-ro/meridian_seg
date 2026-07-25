@@ -5,7 +5,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from cv_bridge import CvBridge
 
-from meridian_msgs.msg import RGBDFrame, SegmentImage
+from sensor_msgs.msg import Image
 
 
 class MeridianSeg(Node):
@@ -33,15 +33,15 @@ class MeridianSeg(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=10)
 
-        self.sub = self.create_subscription(RGBDFrame, '/rgbd_frame', self.frame_callback, qos)
-        self.pub = self.create_publisher(SegmentImage, '/segment_image', qos)
+        self.sub = self.create_subscription(Image, '/camera/rgb', self.frame_callback, qos)
+        self.pub = self.create_publisher(Image, '/segment_image', qos)
 
         self.get_logger().info(
             'meridian_seg started: grid_rows=%d grid_cols=%d' % (self.grid_rows, self.grid_cols))
 
     def frame_callback(self, msg):
-        height = msg.rgb.height
-        width = msg.rgb.width
+        height = msg.height
+        width = msg.width
 
         # cell (r, c) -> segment_id = r * grid_cols + c + 1
         row_idx = (np.arange(height) * self.grid_rows // height).astype(np.int32)
@@ -50,13 +50,8 @@ class MeridianSeg(Node):
         labels = np.clip(labels, 0, 255).astype(np.uint8)
 
         labels_msg = self.bridge.cv2_to_imgmsg(labels, encoding='mono8')
-        labels_msg.header.stamp = msg.timestamp
-        labels_msg.header.frame_id = 'camera'
-
-        seg_msg = SegmentImage()
-        seg_msg.timestamp = msg.timestamp
-        seg_msg.labels = labels_msg
-        self.pub.publish(seg_msg)
+        labels_msg.header = msg.header
+        self.pub.publish(labels_msg)
 
         self.get_logger().info(
             'published segment_image %dx%d grid=%dx%d' % (height, width, self.grid_rows, self.grid_cols),
