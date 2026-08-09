@@ -1,3 +1,16 @@
 /build/
 /install/
 /log/
+
+# Model artifacts.
+#   .pt    upstream FastSAM-s checkpoint; kept so the repo can re-export at
+#          other input sizes without hunting for it
+#   .onnx  portable across machines; this is what you build an engine from
+#   .engine  compiled against one GPU architecture + TensorRT version + CUDA
+#          version. It does NOT transfer between machines -- never commit one.
+weights/*
+!weights/FastSAM-s.pt
+!weights/FastSAM-s-1024.onnx
+
+__pycache__/
+*.py[cod]

@@ -2,15 +2,20 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>meridian_seg</name>
-  <version>0.0.2</version>
-  <description>SAM placeholder segmentation node for the Meridian perception pipeline.</description>
+  <version>0.1.0</version>
+  <description>FastSAM segmentation node for the Meridian perception pipeline.</description>
   <maintainer email="a_o@kakao.com">blu-y</maintainer>
   <license>TODO</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
-  <depend>cv_bridge</depend>
+  <depend>ament_index_python</depend>
   <depend>python3-numpy</depend>
+
+  <!-- torch, torchvision and tensorrt are intentionally not declared here.
+       They have no rosdep key that resolves correctly on both x86_64 desktop
+       and Jetson (JetPack ships its own CUDA-linked builds), so `rosdep install`
+       would fail or install the wrong wheel. See README for how to install. -->
 
   <export>
     <build_type>ament_python</build_type>
