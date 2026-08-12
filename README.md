@@ -60,10 +60,57 @@ The padding is already removed, so **no row offset is added to `cy`**.
 | `conf_th` | `0.4` | Confidence threshold on the candidate table |
 | `iou_th` | `0.9` | Box-IoU threshold for NMS |
 | `area_min` | `16` | Minimum mask area in the label grid |
+| `postprocess_mode` | `eager` | `eager` / `fixed` / `graph` / `graph_full` |
+| `mask_dedup` | `false` | Drop duplicates by mask-pixel IoU |
+| `mask_dedup_th` | `0.7` | Mask-IoU threshold for the above |
+| `dedup_fp32` | `true` | `false` uses fp16: ~2x cheaper, rarely differs |
+| `k1` | `384` | Fixed slot count for confidence candidates |
+| `lanes` | `56` | Fixed slot count for NMS survivors |
+| `nms_iters` | `6` | Fixed-iteration count for NMS |
+| `compile_masks` | `true` | Fuse the mask-assembly chain with `torch.compile` |
 
 `iou_th` governs **box** overlap only. Two masks can overlap far more than their
-boxes suggest, so a consumer that needs de-duplicated instances should compare
-mask overlap rather than rely on this threshold alone.
+boxes suggest. `mask_dedup` is the answer to that: it compares the assembled
+masks pixel-wise and drops the lower-confidence member of each duplicate pair.
+Pair it with a permissive `iou_th` (0.7) so box NMS only caps capacity and the
+mask stage makes the real decision.
+
+## Postprocess modes
+
+The default `eager` path is the reference implementation. The others keep every
+intermediate tensor at a fixed size so no CPU-GPU synchronisation is needed,
+which is what makes CUDA graph capture possible.
+
+| Mode | What it does |
+| --- | --- |
+| `eager` | Reference. Variable shapes, one sync per boolean index and NMS |
+| `fixed` | Fixed shapes only. **Slower than `eager`** — see below |
+| `graph` | `fixed` plus CUDA graph capture of postprocessing |
+| `graph_full` | Also captures preprocessing and the engine |
+
+Measured on an RTX 2070, 640x480 input, ~21 segments:
+
+| Mode | Postprocess | Kernel launches | Syncs |
+| --- | ---: | ---: | ---: |
+| `eager` | 1.22 ms | 143 | 10.1 |
+| `fixed` | 2.27 ms | 65 | 3.1 |
+| `graph` | 0.96 ms | 65 | 1.1 |
+| `graph_full` | 0.96 ms | 1 | 1.1 |
+
+`fixed` on its own is slower because fixed shapes always do the maximum amount
+of work: 56 lanes are assembled even when 21 segments are present. It only pays
+off once CUDA graph removes the launch overhead. **`fixed` is a prerequisite,
+not an optimisation.**
+
+The fixed-slot constants come from measured maxima on live scenes:
+confidence candidates 268, NMS survivors 49, greedy chain depth 4. Overflowing
+a slot does not silently truncate — a counter increments and a warning is
+logged, so raise `lanes` if you see one.
+
+`compile_masks` costs 2-3 seconds at startup and saves ~0.3 ms per frame, so it
+only pays off for runs longer than a few minutes. It needs `triton`; without it
+the node warns once and falls back to eager evaluation rather than failing.
+Set `TORCHINDUCTOR_COMPILE_THREADS=1` if compilation hangs.
 
 ## Prerequisites
 
