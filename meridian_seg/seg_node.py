@@ -195,7 +195,7 @@ class SamNode(Node):
         #   메모리 트래픽이 정비례한다. 72 -> 56만으로 후처리가 1.048 ->
         #   0.774ms가 된다(26%). 다만 여유가 얇아지므로, 물건이 많은 장면에서
         #   경고가 뜨면 올려야 한다. 49보다 낮추면 안 된다.
-        self.declare_parameter("postprocess_mode", "eager")
+        self.declare_parameter("postprocess_mode", "graph_full")
         self.declare_parameter("k1", 384)         # conf 후보 고정 슬롯
         self.declare_parameter("lanes", 56)       # NMS 생존 고정 슬롯
         self.declare_parameter("nms_iters", 6)    # 고정 반복 횟수
@@ -203,7 +203,7 @@ class SamNode(Node):
         # ② mask dedup. box NMS(iou_th)는 상자만 보므로 용량 제어만 맡기고,
         # 진짜 중복 판정은 조립된 마스크의 픽셀 겹침으로 한다. 이때 iou_th는
         # 관대하게(0.7) 두는 것이 스펙의 짝이다.
-        self.declare_parameter("mask_dedup", False)
+        self.declare_parameter("mask_dedup", True)
         self.declare_parameter("mask_dedup_th", 0.7)
         self.declare_parameter("dedup_iters", 4)
         self.declare_parameter("dedup_fp32", True)
@@ -846,12 +846,33 @@ class SamNode(Node):
             f"(k1={self.k1}, lanes={self.lanes})"
         )
 
+    def fall_back_to_eager(self, why: str) -> None:
+        """graph 캡처가 안 되는 환경이면 조용히 죽지 말고 eager로 돌아간다.
+
+        graph_full이 기본값이므로, TensorRT 버전이나 드라이버 조합에 따라 캡처가
+        실패할 수 있다. 결과는 eager와 같으므로 속도만 원래대로 돌아갈 뿐이다.
+        """
+        self.get_logger().warn(
+            f"CUDA graph 캡처 실패, eager로 진행합니다 (결과는 동일, 속도만 "
+            f"원래대로): {why}"
+        )
+        self.postprocess_mode = "eager"
+        self.graph = None
+
     def process_graph_full(
         self, rgb: np.ndarray, geometry: Geometry
     ) -> tuple[torch.Tensor, int]:
         """원본 RGB를 고정 버퍼에 올리고 replay 한 번으로 끝낸다."""
         if self.graph is None:
-            self.build_full_graph(geometry)
+            try:
+                self.build_full_graph(geometry)
+            except Exception as exc:      # noqa: BLE001
+                self.fall_back_to_eager(f"{type(exc).__name__}: {exc}")
+                x = self.letterbox(
+                    self.to_img_rgb(rgb, self.device), geometry,
+                    self.engine_dtype)
+                pred_raw, proto = self.forward(x)
+                return self.postprocess(pred_raw, proto, geometry)
 
         src = torch.from_numpy(np.ascontiguousarray(rgb))
         self.static_rgb.copy_(src, non_blocking=True)
@@ -889,7 +910,11 @@ class SamNode(Node):
     ) -> tuple[torch.Tensor, int]:
         """캡처된 graph를 replay한다. pred_raw/proto는 주소가 같아야 한다."""
         if self.graph is None:
-            self.build_postprocess_graph(geometry)
+            try:
+                self.build_postprocess_graph(geometry)
+            except Exception as exc:      # noqa: BLE001
+                self.fall_back_to_eager(f"{type(exc).__name__}: {exc}")
+                return self.postprocess(pred_raw, proto, geometry)
 
         self.graph.replay()
         count = self.read_status()      # 프레임당 유일한 sync
