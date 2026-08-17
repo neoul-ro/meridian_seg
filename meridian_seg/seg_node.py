@@ -450,7 +450,12 @@ class SamNode(Node):
     @staticmethod
     def to_img_rgb(rgb_raw: np.ndarray, device: str) -> torch.Tensor:
         """(H, W, 3) uint8 -> (1, 3, H, W) fp32 [0, 1] on device."""
-        # frombuffer 결과는 read-only라서 from_numpy 전에 복사가 필요하다.
+        # ascontiguousarray는 여기서 사실상 no-op다. rclpy가 주는 msg.data는
+        # array.array('B')라 frombuffer 뷰도 쓰기 가능하고, step == width*3이면
+        # 이미 C-연속이라 같은 객체가 그대로 돌아온다(실측 0.0002ms).
+        # 행 패딩이 있는 카메라에서만 실제 복사가 일어나고, 그때는 필요한 복사다.
+        # ★ "read-only라 복사가 필요하다"는 예전 주석은 틀렸다. 그 말을 믿고
+        #   .copy()를 넣으면 프레임마다 900KB 복사가 새로 생긴다.
         tensor = torch.from_numpy(np.ascontiguousarray(rgb_raw))
         tensor = tensor.to(device, non_blocking=True)
         # uint8을 올린 뒤 GPU에서 나누는 편이 fp32를 올리는 것보다 전송량이 4배 적다
@@ -515,57 +520,6 @@ class SamNode(Node):
         self.conf = torch.zeros(0, device=self.device)
         self.bbox_proto = torch.zeros((0, 4), device=self.device)
         self.area = torch.zeros(0, dtype=torch.long, device=self.device)
-
-    def nms_fixed(
-        self, boxes: torch.Tensor, score: torch.Tensor, valid: torch.Tensor
-    ) -> torch.Tensor:
-        """torchvision.ops.nms와 같은 답을 고정 반복으로 구한다.
-
-        greedy NMS는 "탈락 여부"를 순차로 정하므로 출력 개수가 가변이고 커널
-        launch가 반복된다. 대신 다음 고정점을 찾는다.
-
-            alive[i] = valid[i] and not any(j: 나보다 상위 and IoU>th and alive[j])
-
-        ★ 매 라운드 alive를 valid에서 다시 계산해야 한다. alive &= ~killed로
-          누적하면 사슬 A>B>C에서 B가 죽은 뒤 C가 되살아나지 못해 greedy와
-          답이 갈린다. (A가 B를 죽이고, 죽은 B는 더 이상 C를 죽이지 못한다)
-
-        상위 관계가 순서라 충돌 그래프는 DAG이고, 따라서 고정점은 유일하며
-        사슬 깊이만큼의 라운드로 수렴한다.
-        """
-        n = boxes.shape[0]
-        area = ((boxes[:, 2] - boxes[:, 0]).clamp(min=0)
-                * (boxes[:, 3] - boxes[:, 1]).clamp(min=0))
-        lt = torch.max(boxes[:, None, :2], boxes[None, :, :2])
-        rb = torch.min(boxes[:, None, 2:], boxes[None, :, 2:])
-        wh = (rb - lt).clamp(min=0)
-        inter = wh[..., 0] * wh[..., 1]
-        iou = inter / (area[:, None] + area[None, :] - inter + 1e-9)
-
-        # j가 i보다 상위: 점수가 높거나, 같으면 인덱스가 앞선 쪽. 동점 처리를
-        # 명시해야 torchvision의 내림차순 정렬과 순서가 어긋나지 않는다.
-        idx = torch.arange(n, device=boxes.device)
-        outranks = (score[None, :] > score[:, None]) | (
-            (score[None, :] == score[:, None]) & (idx[None, :] < idx[:, None])
-        )
-        conflict = (iou > self.iou_th) & outranks
-
-        alive = valid.clone()
-        for _ in range(self.nms_iters):
-            killed = (conflict & alive[None, :]).any(dim=1)
-            updated = valid & ~killed
-            if torch.equal(updated, alive):
-                return alive
-            alive = updated
-
-        # 반복이 모자라면 아직 수렴 전이다. 조용히 틀린 답을 내지 않는다.
-        self.overflow_nms += 1
-        self.get_logger().warn(
-            f"NMS 고정 반복 {self.nms_iters}회로 수렴하지 않았습니다 "
-            f"(누적 {self.overflow_nms}프레임). nms_iters를 올리세요.",
-            throttle_duration_sec=5.0,
-        )
-        return alive
 
     def fixed_core(
         self, pred_raw: torch.Tensor, proto: torch.Tensor, geometry: Geometry
@@ -1095,8 +1049,9 @@ class SamNode(Node):
                 elapsed = (time.perf_counter() - started) * 1000.0
                 self.get_logger().info(
                     f"frame={self.frame_count}, objects={count}, "
-                    f"segments={int(labels.max())}, "
-                    f"size={labels.shape[1]}x{labels.shape[0]}, {elapsed:.1f} ms"
+                    f"segments={count}, "
+                    f"size={labels.shape[1]}x{labels.shape[0]}, {elapsed:.1f} ms, "
+                    f"mode={self.postprocess_mode}"
                 )
         except Exception as exc:
             self.get_logger().error(
