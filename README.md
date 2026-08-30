@@ -66,6 +66,60 @@ fx, fy, cx, cy = fx/2.5, fy/2.5, cx/2.5, cy/2.5
 
 ---
 
+## 설치
+
+`git clone`만으로는 안 돕니다. **세 가지가 더 필요합니다.**
+
+### 1. meridian_msgs (필수)
+
+`rosdep`에 없는 패키지입니다. 같은 워크스페이스에 직접 받으셔야 합니다.
+
+```bash
+cd ~/your_ws/src
+git clone https://github.com/neoul-ro/meridian_msgs.git
+```
+
+없으면 `geobuilder_node`가 `Instance3DSet`을 import하지 못해 죽습니다.
+
+### 2. torch / torchvision / tensorrt (필수)
+
+`package.xml`에 **일부러 안 적었습니다.** rosdep이 CUDA 빌드를 구분하지 못해
+CPU 휠을 깔아버려서 오히려 망가집니다. 직접 설치하십시오.
+
+이 조합에서 검증했습니다 (RTX 2070, CUDA 12.1):
+
+```bash
+pip install torch==2.5.1+cu121 torchvision==0.20.1+cu121 \
+  --index-url https://download.pytorch.org/whl/cu121
+pip install tensorrt-cu12==10.13.3.9 tensorrt-cu12-bindings==10.13.3.9 \
+  tensorrt-cu12-libs==10.13.3.9
+```
+
+> ⚠️ `pip install tensorrt==10.13.3.9`는 **안 됩니다.** cu13 변종으로 잡혀서
+> 깨집니다. 위처럼 `tensorrt-cu12`로 세 패키지를 명시하십시오.
+
+**venv를 쓰신다면** `colcon build`도 그 venv의 인터프리터로 하셔야 합니다.
+안 그러면 `ros2 run` 래퍼에 `#!/usr/bin/python3` shebang이 박혀서
+`ModuleNotFoundError: No module named 'torch'`가 납니다.
+
+```bash
+<venv>/bin/python3 -m colcon build --symlink-install --packages-select meridian_seg
+```
+
+### 3. TensorRT 엔진 (필수)
+
+저장소에 `.engine`은 없습니다. 아래 "엔진 만들기"를 보십시오. 10~20분.
+
+### 빌드
+
+```bash
+cd ~/your_ws
+colcon build --symlink-install --packages-select meridian_msgs meridian_seg
+source install/setup.bash
+```
+
+---
+
 ## 어떤 weight를 쓰는가
 
 기본으로 쓰는 건 **`FastSAM-s-1024.engine`** 하나입니다 (`-s` = small, 1024×1024).

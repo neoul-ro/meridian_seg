@@ -218,7 +218,7 @@ class GeobuilderNode(Node):
         voxel = (f"{self.voxel_size_m * 100:g}cm" if self.voxel_size_m > 0.0
                  else "off (모든 점 발행)")
         self.get_logger().info(
-            "Instance Builder node started: "
+            "Geobuilder node started: "
             f"depth={self.get_parameter('depth_topic').value}, "
             f"segments={self.get_parameter('segment_topic').value}, "
             f"voxel={voxel}, erosion={self.erosion_px}px, "

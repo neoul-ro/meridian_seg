@@ -12,13 +12,21 @@
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>cv_bridge</depend>
+  <depend>ament_index_python</depend>
+
+  <!-- torch / torchvision / tensorrt 는 여기 적지 않는다. rosdep 규칙이
+       CUDA 빌드를 구분하지 못해서(cpu 휠이 깔린다) 오히려 망가진다.
+       README의 "설치"에 검증된 버전과 설치 명령을 적어두었다. -->
+
+  <!-- meridian_msgs 는 rosdep에 없다. github.com/neoul-ro/meridian_msgs 를
+       같은 워크스페이스에 clone해야 한다. -->
+  <depend>meridian_msgs</depend>
 
   <!-- geobuilder_node (선택적으로 seg.launch.py가 같이 띄운다) -->
   <depend>sensor_msgs_py</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
   <depend>visualization_msgs</depend>
-  <depend>meridian_msgs</depend>
 
   <exec_depend>python3-numpy</exec_depend>
 
