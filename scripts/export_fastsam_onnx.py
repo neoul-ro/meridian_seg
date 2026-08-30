@@ -2,7 +2,7 @@
 """Export weights/FastSAM.pt -> weights/FastSAM-<imgsz>.onnx.
 
 Uses the vendored ultralytics 8.0.120 inside FastSAM_official, i.e. the same
-code fastsam_node.py runs, so the exported graph matches production.
+code seg_node.py runs, so the exported graph matches production.
 
     python3 scripts/export_fastsam_onnx.py
 

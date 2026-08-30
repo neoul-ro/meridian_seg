@@ -1,21 +1,31 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>meridian_seg</name>
   <version>0.1.0</version>
-  <description>FastSAM segmentation node for the Meridian perception pipeline.</description>
+  <description>FastSAM segmentation node for the Meridian perception pipeline: rgb8 image in, mono8 segment label image out.</description>
   <maintainer email="a_o@kakao.com">blu-y</maintainer>
-  <license>TODO</license>
+  <license>Apache-2.0</license>
 
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- seg_node -->
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
-  <depend>ament_index_python</depend>
-  <depend>python3-numpy</depend>
+  <depend>cv_bridge</depend>
 
-  <!-- torch, torchvision and tensorrt are intentionally not declared here.
-       They have no rosdep key that resolves correctly on both x86_64 desktop
-       and Jetson (JetPack ships its own CUDA-linked builds), so `rosdep install`
-       would fail or install the wrong wheel. See README for how to install. -->
+  <!-- geobuilder_node (선택적으로 seg.launch.py가 같이 띄운다) -->
+  <depend>sensor_msgs_py</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>meridian_msgs</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

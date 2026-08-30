@@ -269,11 +269,14 @@ def main() -> int:
               "(the engine itself is fine)")
 
     if rc == 0:
-        # seg_node takes no image_size: it reads the engine's own input shape and
-        # derives the letterbox geometry from the first frame it receives.
+        height, width = imgsz
         print("\nrun the node against it:")
-        print("  ros2 run meridian_seg seg_node --ros-args \\")
-        print(f"    -p model_path:={engine}")
+        print(f"  ros2 run meridian_seg seg_node --ros-args -p model_path:={engine}")
+        # seg_node는 1024x1024 고정이다. image_size 파라미터는 없고, 다른 크기로
+        # 빌드한 엔진은 전처리 letterbox와 어긋나므로 그대로는 쓸 수 없다.
+        if (height, width) != (1024, 1024):
+            print(f"  ! 주의: seg_node는 1024x1024 엔진만 받는다 (이 엔진은 "
+                  f"{height}x{width}).")
     return rc
 
 

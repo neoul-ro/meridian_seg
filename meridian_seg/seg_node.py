@@ -15,7 +15,7 @@ ultralytics를 쓰지 않는 이유
 /255를 건너뛰고(정상), retina_masks 경로가 orig_img.shape[:2]를 참조하는데 그 orig_img가
 (1, 3, 1024, 1024) 텐서라서 (1, 3)이 나온다. 즉 전처리를 직접 하는 것과 예측기를
 유지하는 것은 함께 성립하지 않는다. 그래서 엔진을 직접 호출한다. 결과적으로
-trt10_compat도, FastSAM_official 저장소도 런타임에 필요 없다.
+ultralytics도, FastSAM_official 저장소도 런타임에 필요 없다.
 
 출력 공간
 --------
@@ -80,7 +80,6 @@ def engine_candidates() -> list[Path]:
     # 소스 트리 (--symlink-install 또는 저장소에서 직접 실행)
     found.append(Path(__file__).resolve().parents[1] / "weights" / ENGINE_FILENAME)
     return found
-
 
 MODEL_SIZE = 1024
 PROTO_STRIDE = 4  # FastSAM 설계 상수: proto는 MODEL_SIZE/4
@@ -169,9 +168,9 @@ class Geometry:
         )
 
 
-class SamNode(Node):
+class SegNode(Node):
     def __init__(self) -> None:
-        super().__init__("sam_node")
+        super().__init__("seg_node")
 
         self.declare_parameter("color_topic", "/camera/rgb")
         self.declare_parameter("segment_topic", "/segment_image")
@@ -264,6 +263,7 @@ class SamNode(Node):
 
         # 비워두면 알려진 위치들을 순서대로 찾는다. 지정하면 그 경로만 쓴다.
         configured = str(self.get_parameter("model_path").value).strip()
+
         if configured:
             self.model_path = Path(configured).expanduser()
             if not self.model_path.exists():
@@ -1085,7 +1085,7 @@ class SamNode(Node):
 
 def main(args=None) -> None:
     rclpy.init(args=args)
-    node = SamNode()
+    node = SegNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
